@@ -8,8 +8,8 @@ android {
         applicationId "com.shooter.game"
         minSdk 26
         targetSdk 34
-        versionCode 3
-        versionName "1.2"
+        versionCode 5
+        versionName "1.4"
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
