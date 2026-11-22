@@ -1,0 +1,49 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
+      - name: Build
+        env:
+          KS_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          TYPE=$(cat .buildtype 2>/dev/null | tr -d '[:space:]')
+          if [ "$TYPE" = "aab" ]; then
+            gradle bundleRelease --no-daemon
+            AAB=$(ls app/build/outputs/bundle/release/*.aab | head -n1)
+            if [ -n "$KS_B64" ]; then
+              echo "$KS_B64" | base64 -d > release.jks
+              jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore release.jks -storepass "$KS_PASS" -keypass "${KEY_PASS:-$KS_PASS}" "$AAB" "$KEY_ALIAS"
+            else
+              echo "::warning::Kein Release-Key hinterlegt. AAB mit Test-Schluessel signiert, nicht fuer den Play Store geeignet."
+              keytool -genkeypair -keystore test.jks -storepass android -keypass android -alias test -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Test"
+              jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore test.jks -storepass android -keypass android "$AAB" test
+            fi
+          else
+            gradle assembleDebug --no-daemon
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/bundle/release/*.aab
+
